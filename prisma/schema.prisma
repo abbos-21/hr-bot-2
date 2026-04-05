@@ -1,0 +1,278 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  login     String   @unique
+  password  String
+  name      String
+  role      String   @default("admin")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments CandidateComment[]
+  messages Message[]
+}
+
+model Organization {
+  id        String    @id @default(cuid())
+  name      String
+  login     String    @unique
+  password  String
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  branches Branch[]
+  bot      Bot?
+}
+
+model Branch {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  candidates   Candidate[]
+  options      QuestionOption[]
+
+  @@unique([organizationId, name])
+}
+
+model Bot {
+  id             String   @id @default(cuid())
+  token          String   @unique
+  name           String
+  username       String?
+  defaultLang    String   @default("en")
+  isActive       Boolean  @default(true)
+  webhookSet     Boolean  @default(false)
+  organizationId String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  questions      Question[]
+  languages      BotLanguage[]
+  candidates     Candidate[]
+  messages2      BotMessage[]
+  kanbanColumns  KanbanColumn[]
+}
+
+model BotMessage {
+  id     String @id @default(cuid())
+  botId  String
+  lang   String
+  key    String
+  value  String
+
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, lang, key])
+}
+
+model BotLanguage {
+  id        String  @id @default(cuid())
+  botId     String
+  code      String
+  name      String
+  isDefault Boolean @default(false)
+
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, code])
+}
+
+model Question {
+  id         String  @id @default(cuid())
+  botId      String
+  type       String  @default("text")
+  order      Int     @default(0)
+  isActive   Boolean @default(true)
+  isRequired Boolean @default(false)
+  fieldKey   String?
+  filterLabel String?
+  parentOptionId String?
+  branchOrder    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bot          Bot                   @relation(fields: [botId], references: [id], onDelete: Cascade)
+  translations QuestionTranslation[]
+  options      QuestionOption[]
+  answers      Answer[]
+  parentOption QuestionOption?       @relation("BranchQuestions", fields: [parentOptionId], references: [id], onDelete: Cascade)
+}
+
+model QuestionTranslation {
+  id             String  @id @default(cuid())
+  questionId     String
+  lang           String
+  text           String
+  successMessage String?
+  errorMessage   String?
+  phoneButtonText String?
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, lang])
+}
+
+model QuestionOption {
+  id         String  @id @default(cuid())
+  questionId String
+  order      Int     @default(0)
+  isActive   Boolean @default(true)
+  branchId   String?
+
+  question        Question                    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  branch          Branch?                     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  translations    QuestionOptionTranslation[]
+  answers         Answer[]
+  branchQuestions Question[]                  @relation("BranchQuestions")
+}
+
+model QuestionOptionTranslation {
+  id       String @id @default(cuid())
+  optionId String
+  lang     String
+  text     String
+
+  option QuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([optionId, lang])
+}
+
+model Candidate {
+  id           String   @id @default(cuid())
+  botId        String
+  telegramId   String
+  username     String?
+  fullName     String?
+  age          String?
+  phone        String?
+  email        String?
+  position      String?
+  archiveReason String?
+  profilePhoto  String?
+  lang         String   @default("en")
+  status       String   @default("incomplete")
+  branchId     String?
+  columnId     String?
+  currentStep  Int      @default(0)
+  questionQueue String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastActivity DateTime @default(now())
+
+  bot      Bot            @relation(fields: [botId], references: [id], onDelete: Cascade)
+  branch   Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  column   KanbanColumn?  @relation(fields: [columnId], references: [id], onDelete: SetNull)
+  answers  Answer[]
+  comments CandidateComment[]
+  messages Message[]
+  files    CandidateFile[]
+  meetings Meeting[]
+
+  @@index([botId, telegramId])
+}
+
+model Answer {
+  id          String   @id @default(cuid())
+  candidateId String
+  questionId  String
+  optionId    String?
+  textValue   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  candidate Candidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  question  Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  option    QuestionOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, questionId])
+}
+
+model CandidateComment {
+  id          String   @id @default(cuid())
+  candidateId String
+  adminId     String?
+  text        String
+  createdAt   DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  admin     Admin?    @relation(fields: [adminId], references: [id])
+}
+
+model Message {
+  id            String   @id @default(cuid())
+  candidateId   String
+  adminId       String?
+  direction     String   @default("inbound")
+  type          String   @default("text")
+  text          String?
+  fileId        String?
+  fileName      String?
+  mimeType      String?
+  localPath     String?
+  telegramMsgId Int?
+  isRead        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  admin     Admin?    @relation(fields: [adminId], references: [id])
+}
+
+model CandidateFile {
+  id             String   @id @default(cuid())
+  candidateId    String
+  telegramFileId String?
+  fileName       String
+  mimeType       String?
+  localPath      String?
+  size           Int?
+  createdAt      DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model Meeting {
+  id              String   @id @default(cuid())
+  candidateId     String
+  scheduledAt     DateTime
+  note            String?
+  reminderMinutes Int      @default(30)
+  reminderSent    Boolean  @default(false)
+  status          String   @default("scheduled")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model KanbanColumn {
+  id         String   @id @default(cuid())
+  botId      String?
+  bot        Bot?     @relation(fields: [botId], references: [id], onDelete: Cascade)
+  name       String
+  color      String   @default("bg-slate-50")
+  dot        String   @default("bg-slate-400")
+  order      Int      @default(0)
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  candidates Candidate[]
+}
