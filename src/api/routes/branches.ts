@@ -19,10 +19,25 @@ export async function ensureBranchQuestion(organizationId: string): Promise<stri
 
   const botId = org.bot.id;
 
-  // ── 1. Ensure branch question exists ──────────────────────────────────────
+  // ── 1. Check for active branches first ────────────────────────────────────
+  const activeBranches = await prisma.branch.findMany({
+    where: { organizationId, isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
+  // ── 2. Ensure branch question exists only if there are branches ───────────
   let branchQ = await prisma.question.findFirst({
     where: { botId, fieldKey: "branch", isRequired: true },
   });
+
+  if (activeBranches.length === 0) {
+    // No branches — remove stale branch question if one exists, and bail out
+    if (branchQ) {
+      await prisma.question.delete({ where: { id: branchQ.id } });
+    }
+    return null;
+  }
 
   if (!branchQ) {
     // Branch question goes first (order 0); shift all existing questions up by 1
@@ -56,12 +71,7 @@ export async function ensureBranchQuestion(organizationId: string): Promise<stri
     });
   }
 
-  // ── 2. Sync options: create missing options for active branches ────────────
-  const activeBranches = await prisma.branch.findMany({
-    where: { organizationId, isActive: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  // ── 3. Sync options: create missing options for active branches ────────────
 
   const existingOptions = await prisma.questionOption.findMany({
     where: { questionId: branchQ.id, branchId: { not: null } },
