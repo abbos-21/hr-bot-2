@@ -3,6 +3,6 @@ dist/
 .env
 # *.db
 *.db-journal
-uploads/
+# uploads/
 admin/node_modules/
 admin/dist/
